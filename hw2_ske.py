@@ -169,7 +169,7 @@ class ClassificationTree:
         n = y.size
         p = np.unique(y, return_counts=True)[1] / n
 
-        return -1 * np.sum(p * np.log(p))
+        return 1 - np.sum(p * p)
 
     def build_tree_helper(self, X: np.ndarray, y: np.ndarray, depth: int, parent: Node) -> None:
         '''
