@@ -27,6 +27,17 @@ MONTH_ORDER = {m: i for i, m in enumerate(
     ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'], start=1)}
 BINARY_COLUMNS = ['default', 'housing', 'loan']
 
+# Unordered categoricals get one fixed numeric code each (not one-hot), so the feature matrix has exactly
+# one column per original feature (16). The code values are arbitrary labels, not a meaningful order.
+NOMINAL_CODES = {
+    'job': {j: i for i, j in enumerate(
+        ['admin.', 'blue-collar', 'entrepreneur', 'housemaid', 'management', 'retired',
+         'self-employed', 'services', 'student', 'technician', 'unemployed', 'unknown'])},
+    'marital': {'single': 0, 'married': 1, 'divorced': 2},
+    'contact': {'unknown': 0, 'cellular': 1, 'telephone': 2},
+    'poutcome': {'unknown': 0, 'failure': 1, 'other': 2, 'success': 3},
+}
+
 '''
 Problem A-1: Data Preprocessing and EDA
 '''
@@ -53,6 +64,9 @@ class DataLoader:
         self.data_train = None
         self.data_valid = None
 
+        self.is_data_prepped = False
+        self.is_data_splitted = False
+
         self.data_prep()
         self.data_split()
 
@@ -61,25 +75,38 @@ class DataLoader:
         You are asked to split the training data into train/valid datasets on the ratio of 80/20. 
         Add the split datasets to self.data_train, self.data_valid. Both of the split should still be pd.DataFrame.
         '''
-        self.data_train = self.data.sample(random_state=self.random_state, frac=self.split)
+        if self.is_data_splitted:
+            return
+        
+        # int() floors (3616 of 4521); sample(frac=...) would round to 3617
+        n_train = int(self.split * len(self.data))
+        self.data_train = self.data.sample(n=n_train, random_state=self.random_state)
         self.data_valid = self.data.drop(self.data_train.index)
+
+        self.is_data_splitted = True
 
     def data_prep(self) -> None:
         '''
         You are asked to drop any rows with missing values and map categorical variables to numeric values. 
         '''
+        if self.is_data_prepped:
+            return
+
         self.data[TARGET_VARIABLE] = self.data[TARGET_VARIABLE].map(lambda x: 1 if x == 'yes' else 0)
         self.data['education'] = self.data['education'].map(EDUCATION_ORDER)  # pyright: ignore[reportArgumentType]
         self.data['month'] = self.data['month'].map(MONTH_ORDER)  # pyright: ignore[reportArgumentType]
         for col in BINARY_COLUMNS:
             self.data[col] = self.data[col].map({'no': 0, 'yes': 1})  # pyright: ignore[reportArgumentType]
+        for col, codes in NOMINAL_CODES.items():
+            self.data[col] = self.data[col].map(codes)  # pyright: ignore[reportArgumentType]
 
         # A map() that hits an unexpected value yields NaN, which makes that column float64 even after
         # dropna removes the row. Cast every column to one explicit dtype (np.int64, not the platform-
         # dependent builtin int) so the result doesn't depend on pandas/numpy version or OS.
         self.data = self.data.dropna()
-        self.data = pd.get_dummies(self.data, dtype=np.int64)
         self.data = self.data.astype(np.int64)
+
+        self.is_data_prepped = True
 
     def extract_features_and_label(self, data: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         '''
