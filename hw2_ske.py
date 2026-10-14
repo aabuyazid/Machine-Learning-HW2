@@ -118,6 +118,8 @@ class DataLoader:
             y_data: np.ndarray of shape (n_samples,) - Extracted labels
         '''
         # explicit dtypes: one dtype for all features, integer labels (np.bincount needs ints)
+        assert data is not None, "how did this happen"
+
         y_data = data[TARGET_VARIABLE].to_numpy(dtype=np.int64)
         X_data = data.drop(columns=[TARGET_VARIABLE]).to_numpy(dtype=np.float64)
         
@@ -284,18 +286,89 @@ class ClassificationTree:
 
         return predictions
 
+def F1_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Calculate F1 score with handling of edge cases.
+    
+    Args:
+        y_true: Ground truth labels
+        y_pred: Predicted labels
+        
+    Returns:
+        F1 score (between 0 and 1), or 0.0 for edge cases
+    """
+    tp = ((y_true == 1.0) & (y_pred == 1.0)).astype(float).sum()
+    fp = ((y_true == 0.0) & (y_pred == 1.0)).astype(float).sum()
+    fn = ((y_true == 1.0) & (y_pred == 0.0)).astype(float).sum()
+
+    return (2 * tp) / ((2 * tp) + fp + fn)
+
+def get_auroc(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Calculate AUROC score.
+    
+    Args:
+        y_true: Ground truth labels
+        y_pred: Predicted probabilities
+        
+    Returns:
+        AUROC score (between 0 and 1)
+    """
+    order = np.argsort(-y_pred)
+    y_true_sorted = y_true[order]
+    num_positives = y_true.sum()
+    num_negatives = len(y_true) - num_positives
+
+    tp = np.cumsum(y_true_sorted)
+    fp = np.cumsum(1 - y_true_sorted)
+
+    tpr = np.concatenate((np.zeros(1), tp / num_positives))
+    fpr = np.concatenate((np.zeros(1), fp / num_negatives))
+    
+    return float(np.trapezoid(tpr, fpr))
+
 def train_XGBoost() -> dict:
     '''
     See instruction for implementation details. This function will be tested on the pre-built enviornment
     with numpy, pandas, xgboost available.
     '''
-    ...
+    alpha_vals = [1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3]
+
+    dataloader = DataLoader('hw2-bank_data.csv')
+    
+    X_train, y_train = dataloader.extract_features_and_label(dataloader.data_train)
+    X_valid, y_valid = dataloader.extract_features_and_label(dataloader.data_valid)
+
+    best_hyperparameters = {}
+    
+    best_f1 = 0.0
+    
+    for a in alpha_vals:
+        for lr in [0.2, 0.3, 0.4, 0.5]:
+            for max_depth in [4, 5, 6, 7, 8]:
+                params = {
+                    "reg_alpha": a,
+                    "learning_rate": lr,
+                    "max_depth": max_depth,
+                    "random_state": 42,
+                    "n_estimators": 100
+                }
+
+                model = XGBClassifier(**params)
+                model.fit(X_train, y_train)
+
+                y_pred = model.predict(X_valid)
+                f1 = F1_score(y_valid, y_pred)
+                
+                if f1 > best_f1:
+                    best_f1, best_hyperparameters = f1, params
+
+    return best_hyperparameters
 
 '''
 Initialize the following variable with the best model you have found. This model will be used in testing 
 in our pre-built environment.
 '''
-my_best_model = XGBClassifier()
+
+my_best_model = XGBClassifier(**train_XGBoost())
 
 
 if __name__ == "__main__":
