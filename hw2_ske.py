@@ -74,8 +74,12 @@ class DataLoader:
         for col in BINARY_COLUMNS:
             self.data[col] = self.data[col].map({'no': 0, 'yes': 1})  # pyright: ignore[reportArgumentType]
 
+        # A map() that hits an unexpected value yields NaN, which makes that column float64 even after
+        # dropna removes the row. Cast every column to one explicit dtype (np.int64, not the platform-
+        # dependent builtin int) so the result doesn't depend on pandas/numpy version or OS.
         self.data = self.data.dropna()
-        self.data = pd.get_dummies(self.data, dtype=int)
+        self.data = pd.get_dummies(self.data, dtype=np.int64)
+        self.data = self.data.astype(np.int64)
 
     def extract_features_and_label(self, data: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         '''
@@ -86,8 +90,9 @@ class DataLoader:
             X_data: np.ndarray of shape (n_samples, n_features) - Extracted features
             y_data: np.ndarray of shape (n_samples,) - Extracted labels
         '''
-        y_data = data[TARGET_VARIABLE].to_numpy() 
-        X_data = data.drop(columns=[TARGET_VARIABLE]).to_numpy()
+        # explicit dtypes: one dtype for all features, integer labels (np.bincount needs ints)
+        y_data = data[TARGET_VARIABLE].to_numpy(dtype=np.int64)
+        X_data = data.drop(columns=[TARGET_VARIABLE]).to_numpy(dtype=np.float64)
         
         return (X_data, y_data)
 
