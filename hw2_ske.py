@@ -344,22 +344,24 @@ def train_XGBoost() -> dict:
     for a in alpha_vals:
         for lr in [0.2, 0.3, 0.4, 0.5]:
             for max_depth in [4, 5, 6, 7, 8]:
-                params = {
-                    "reg_alpha": a,
-                    "learning_rate": lr,
-                    "max_depth": max_depth,
-                    "random_state": 42,
-                    "n_estimators": 100
-                }
+                for scale_pos_weight in [1, 2, 4, 8]:
+                    params = {
+                        "reg_alpha": a,
+                        "learning_rate": lr,
+                        "max_depth": max_depth,
+                        "random_state": 42,
+                        "n_estimators": 100,
+                        "scale_pos_weight": scale_pos_weight
+                    }
 
-                model = XGBClassifier(**params)
-                model.fit(X_train, y_train)
+                    model = XGBClassifier(**params)
+                    model.fit(X_train, y_train)
 
-                y_pred = model.predict(X_valid)
-                f1 = F1_score(y_valid, y_pred)
-                
-                if f1 > best_f1:
-                    best_f1, best_hyperparameters = f1, params
+                    y_pred = model.predict(X_valid)
+                    f1 = F1_score(y_valid, y_pred)
+                    
+                    if f1 > best_f1:
+                        best_f1, best_hyperparameters = f1, params
 
     return best_hyperparameters
 
@@ -368,9 +370,8 @@ Initialize the following variable with the best model you have found. This model
 in our pre-built environment.
 '''
 
-my_best_model = XGBClassifier(**train_XGBoost())
-
+my_best_model = XGBClassifier(reg_alpha=0.001, learning_rate=0.2, max_depth=4, random_state=42,
+                              n_estimators=100, scale_pos_weight=4)
 
 if __name__ == "__main__":
-    dataloader = DataLoader('hw2-bank_data.csv')
-    dataloader.data_split()
+    print(train_XGBoost())
